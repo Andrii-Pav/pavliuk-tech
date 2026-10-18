@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pavliuk-Tech Inventory</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>Pavliuk-Tech Inventory</h1>
+    <a href="/docs">API docs</a>
+  </header>
+
+  <main>
+    <p id="message" class="message hidden"></p>
+
+    <section class="card">
+      <h2>Categories</h2>
+      <form id="category-form" class="row">
+        <input id="category-name" placeholder="New category" maxlength="100" required>
+        <button type="submit">Add</button>
+      </form>
+      <ul id="category-list" class="tags"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Add product</h2>
+      <form id="product-form" class="grid">
+        <input id="product-sku" placeholder="SKU" maxlength="50" required>
+        <input id="product-name" placeholder="Name" maxlength="200" required>
+        <input id="product-brand" placeholder="Brand" maxlength="100" required>
+        <input id="product-price" type="number" step="0.01" min="0.01" placeholder="Price" required>
+        <select id="product-category" required></select>
+        <button type="submit">Add product</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Products</h2>
+      <div class="row">
+        <input id="search" placeholder="Search by name">
+        <select id="filter-category"></select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>SKU</th><th>Name</th><th>Brand</th><th>Category</th>
+              <th class="num">Price</th><th class="num">Qty</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="product-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="history-card" class="card hidden">
+      <h2 id="history-title">History</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Date</th><th>Reason</th><th class="num">Change</th></tr>
+          </thead>
+          <tbody id="history-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>Version: <span id="version">-</span></footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

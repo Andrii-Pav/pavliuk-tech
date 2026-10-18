@@ -1,5 +1,5 @@
 locals {
-  github_repository = "Andrii-Pav/pavliuk-tech"
+  github_repository = "Andrii-Pav@186678674/pavliuk-tech@1424256081"
 }
 
 resource "aws_iam_openid_connect_provider" "github" {

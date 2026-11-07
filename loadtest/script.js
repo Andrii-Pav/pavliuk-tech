@@ -14,6 +14,9 @@ export const options = {
     { duration: '2m', target: 0 },
   ],
   summaryTrendStats: ['avg', 'med', 'p(95)', 'p(99)', 'max'],
+  thresholds: {
+    'http_req_duration{name:GET /products}': ['max>=0'],
+  },
 };
 
 const JSON_HEADERS = { headers: { 'Content-Type': 'application/json' } };

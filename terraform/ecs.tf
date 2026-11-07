@@ -37,6 +37,10 @@ resource "aws_iam_role_policy" "read_database_url" {
 
 resource "aws_ecs_cluster" "main" {
   name = "${var.project}-cluster"
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
 }
 
 resource "aws_ecs_task_definition" "app" {
@@ -61,6 +65,12 @@ resource "aws_ecs_task_definition" "app" {
       containerPort = var.container_port
       protocol      = "tcp"
     }]
+
+    environment = [
+      { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379/0" },
+      { name = "CACHE_ENABLED", value = tostring(var.cache_enabled) },
+      { name = "CACHE_TTL_SECONDS", value = tostring(var.cache_ttl_seconds) },
+    ]
 
     secrets = [{
       name      = "DATABASE_URL"
@@ -102,6 +112,6 @@ resource "aws_ecs_service" "app" {
   depends_on = [aws_lb_listener.http]
 
   lifecycle {
-    ignore_changes = [task_definition]
+    ignore_changes = [task_definition, desired_count]
   }
 }

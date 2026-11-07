@@ -1,15 +1,16 @@
+import json
 import os
 from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import models, schemas
+from app import cache, models, schemas
 from app.database import Base, engine, get_db
 
 Base.metadata.create_all(bind=engine)
@@ -104,12 +105,31 @@ def list_products(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
+
+    key = f"products:list:category={category_id}:q={q}:limit={limit}:offset={offset}"
+
+    cached = cache.get(key)
+    if cached is not None:
+        return Response(content=cached, media_type="application/json", headers={"X-Cache": "HIT"})
+
     query = db.query(models.Product)
     if category_id is not None:
         query = query.filter(models.Product.category_id == category_id)
     if q:
         query = query.filter(models.Product.name.ilike(f"%{q}%"))
-    return query.order_by(models.Product.id).offset(offset).limit(limit).all()
+    products = query.order_by(models.Product.id).offset(offset).limit(limit).all()
+
+    body = json.dumps(
+        [schemas.ProductOut.model_validate(p).model_dump(mode="json") for p in products],
+        ensure_ascii=False,
+    ).encode()
+    cache.set(key, body)
+
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"X-Cache": "MISS" if cache.ENABLED else "OFF"},
+    )
 
 
 @app.get("/products/{product_id}", response_model=schemas.ProductOut)

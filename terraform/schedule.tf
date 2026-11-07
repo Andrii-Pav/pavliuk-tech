@@ -5,7 +5,7 @@ resource "aws_appautoscaling_scheduled_action" "day" {
   service_namespace  = aws_appautoscaling_target.app.service_namespace
   resource_id        = aws_appautoscaling_target.app.resource_id
   scalable_dimension = aws_appautoscaling_target.app.scalable_dimension
-  schedule           = "cron(0 8 * * ? *)"
+  schedule           = "cron(0 11 * * ? *)"
   timezone           = "Europe/Kiev"
 
   scalable_target_action {

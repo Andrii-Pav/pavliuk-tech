@@ -1,8 +1,11 @@
 # Pavliuk-Tech Inventory
 
 Невеликий застосунок для обліку комп'ютерного обладнання в магазині Pavliuk-Tech.
-Це лабораторна робота 1 (Cloud Services, осінь 2026): застосунок запакований у Docker,
-розгорнутий в AWS через Terraform і оновлюється автоматично через GitHub Actions.
+Це лабораторні роботи 1 і 2 (Cloud Services, осінь 2026): застосунок запакований у Docker,
+розгорнутий в AWS через Terraform, оновлюється автоматично через GitHub Actions,
+масштабується під навантаження і кешує читання в Redis.
+
+Публічна адреса застосунку змінюється після кожного `terraform apply`: `terraform output app_url`.
 
 Документація API (Swagger): та сама адреса + `/docs`
 
@@ -21,6 +24,9 @@ FastAPI (Python 3.15), PostgreSQL 16, SQLAlchemy, звичайні HTML/CSS/JS �
 Docker для пакування, Terraform для інфраструктури, AWS (ECS Fargate, RDS, ALB, ECR),
 GitHub Actions для автоматичного деплою.
 
+Для лаби 2 додатково: Redis (Amazon ElastiCache) для кешу, CloudWatch для панелі
+і сповіщень, k6 для навантажувального тестування.
+
 ## Структура проєкту
 
 ```
@@ -29,12 +35,15 @@ app/
   models.py      таблиці бази даних
   schemas.py     перевірка даних, що приходять і йдуть через API
   database.py    підключення до бази (адреса береться зі змінної DATABASE_URL)
+  cache.py       кеш списку товарів у Redis (cache-aside)
   static/        сторінка: index.html, style.css, app.js
 terraform/       уся інфраструктура AWS
 .github/workflows/deploy.yml   автоматичний деплой
 Dockerfile       збірка образу
-compose.yaml     локальний запуск: застосунок + PostgreSQL
+compose.yaml     локальний запуск: застосунок + PostgreSQL + Redis
 .env.example     приклад змінних для локального запуску
+loadtest/        навантажувальний тест k6
+docs/            звіти лаби 2: AUTOSCALING, LOADTEST, ALERTS, CACHE, SCHEDULE
 ```
 
 ## Запуск на своєму комп'ютері
@@ -62,6 +71,9 @@ docker compose up         # запустити знову, дані на міс�
 docker compose exec db psql -U pavliuk -d pavliuk_tech -c "SELECT * FROM products;"
 ```
 
+Локально працює і кеш: перший `curl -si localhost:8000/products | grep -i x-cache`
+покаже `MISS`, другий (протягом 30 с) `HIT`.
+
 ## База даних
 
 Три таблиці:
@@ -86,17 +98,27 @@ docker compose exec db psql -U pavliuk -d pavliuk_tech -c "SELECT * FROM product
 | GET, PUT, DELETE | `/products/{id}` | один товар, зміна, видалення |
 | GET, POST | `/products/{id}/movements` | історія складу, нове надходження чи продаж |
 
+Список товарів `GET /products` кешується в Redis на 30 секунд. Заголовок відповіді `X-Cache`
+показує, звідки дані: `HIT` (з кешу), `MISS` (з бази) або `OFF` (кеш вимкнено).
+
 ## Розгортання в AWS
 
 1. У файлі `terraform/github_oidc.tf` на початку вказано, якому репозиторію GitHub
    дозволено розгортати.
-2. Створити інфраструктуру:
+2. У `terraform/terraform.tfvars` (його немає в git) вказати пошту для сповіщень:
+   ```hcl
+   alert_email = "моя@пошта"
+   ```
+3. Створити інфраструктуру:
    ```bash
    cd terraform
    terraform init
    terraform apply
    ```
-3. Адреса застосунку: `terraform output app_url`.
+4. Підтвердити підписку на сповіщення в листі від AWS.
+5. Запустити деплой: GitHub → Actions → Deploy → Run workflow
+   (реєстр образів після `apply` порожній, образ збирає workflow).
+6. Адреса застосунку: `terraform output app_url`.
 
 Що саме створюється:
 
@@ -106,7 +128,9 @@ docker compose exec db psql -U pavliuk -d pavliuk_tech -c "SELECT * FROM product
 - база PostgreSQL (RDS) у приватних підмережах, без публічної адреси,
   приймає підключення тільки від застосунку;
 - реєстр образів ECR;
-- NAT-gateway.
+- NAT-gateway;
+- Redis (ElastiCache) у приватних підмережах, приймає підключення тільки від застосунку;
+- автомасштабування, панель CloudWatch і сповіщення на email.
 
 Пароль до бази Terraform генерує сам і зберігає в SSM Parameter Store.
 Звідти ECS підставляє його в контейнер як змінну `DATABASE_URL`, у коді і репозиторії його немає.
@@ -120,6 +144,24 @@ docker compose exec db psql -U pavliuk -d pavliuk_tech -c "SELECT * FROM product
 2. збирається Docker-образ і публікується в ECR з тегом, що дорівнює хешу коміту;
 3. у ECS реєструється нова версія завдання з цим образом;
 4. сервіс оновлюється, нові контейнери перевіряє балансувальник, і лише потім зупиняються старі.
+
+## Лабораторна робота 2: масштабування, моніторинг, кеш
+
+- автомасштабування ECS за CPU (ціль 60%, від 1 до 4 задач): `terraform/autoscaling.tf`;
+- панель CloudWatch і сповіщення на email (CPU понад 70% протягом 2 хв): `terraform/monitoring.tf`,
+  адреса панелі: `terraform output dashboard_url`;
+- кеш списку товарів у Redis (ElastiCache, TTL 30 с): `app/cache.py`, `terraform/elasticache.tf`;
+- масштабування за розкладом (з 11:00 мінімум 2 задачі, з 22:00 одна): `terraform/schedule.tf`,
+  вмикається змінною `enable_schedule = true`;
+- навантажувальний тест (потрібен [k6](https://k6.io)):
+  ```bash
+  ./loadtest/run.sh 40
+  ```
+
+Як працює система і команди для тестів з кешем і без нього: [docs/README.md](docs/README.md).
+
+Звіти: [AUTOSCALING](docs/AUTOSCALING.md), [LOADTEST](docs/LOADTEST.md),
+[ALERTS](docs/ALERTS.md), [CACHE](docs/CACHE.md), [SCHEDULE](docs/SCHEDULE.md).
 
 ## Видалення всього
 
